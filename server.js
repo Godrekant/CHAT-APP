@@ -22,12 +22,12 @@ const chatHistory = {};
 const callRooms = {};
 const typingUsers = {};
 
-// Load users from JSON file on startup
+// Load users from JSON file
 async function loadUsers() {
   try {
     const data = await fs.readFile(path.join(__dirname, 'users.json'), 'utf8');
     users = JSON.parse(data);
-    console.log('✅ Loaded users from JSON file');
+    console.log('✅ Loaded users from JSON file, count:', Object.keys(users).length);
     return users;
   } catch (err) {
     console.log('⚠️ No users.json found or invalid JSON - starting fresh');
@@ -124,7 +124,7 @@ app.post('/api/signup', async (req, res) => {
   }
 });
 
-// Login route - FIXED VERSION
+// Login route
 app.post('/api/login', async (req, res) => {
   console.log('========================================');
   console.log('🚀 LOGIN ATTEMPT');
@@ -182,54 +182,82 @@ app.post('/api/login', async (req, res) => {
   }
 });
 
-// Search users
+// Search users - FIXED VERSION
 app.get('/api/users/search', async (req, res) => {
   const { query, currentUsername } = req.query;
   
+  console.log('🔍 Search request:', { query, currentUsername });
+  
   if (!query) {
+    console.log('❌ No query provided');
     return res.json([]);
   }
 
-  // Load fresh users data
-  await loadUsers();
-
-  const results = [];
-  for (const username in users) {
-    if (username !== currentUsername && 
-        (username.toLowerCase().includes(query.toLowerCase()) || 
-         users[username].name.toLowerCase().includes(query.toLowerCase()))) {
-      results.push({
-        username: username,
-        name: users[username].name,
-        avatar: users[username].avatar,
-        isOnline: !!Object.values(onlineUsers).find(u => u === username)
-      });
+  try {
+    // CRITICAL: Wait for users to load
+    await loadUsers();
+    console.log('📚 Users loaded for search, count:', Object.keys(users).length);
+    
+    const results = [];
+    for (const username in users) {
+      if (username !== currentUsername && 
+          (username.toLowerCase().includes(query.toLowerCase()) || 
+           users[username].name.toLowerCase().includes(query.toLowerCase()))) {
+        // Check if user is online
+        let isOnline = false;
+        for (const socketId in onlineUsers) {
+          if (onlineUsers[socketId] === username) {
+            isOnline = true;
+            break;
+          }
+        }
+        
+        results.push({
+          username: username,
+          name: users[username].name,
+          avatar: users[username].avatar,
+          isOnline: isOnline
+        });
+      }
     }
+    
+    console.log('✅ Search results:', results.length);
+    res.json(results);
+  } catch (err) {
+    console.error('❌ Search error:', err.message);
+    res.status(500).json({ error: 'Search failed' });
   }
-  
-  res.json(results);
 });
 
-// Get online users
+// Get online users - FIXED VERSION
 app.get('/api/users/online', async (req, res) => {
   const currentUsername = req.query.username;
   
-  // Load fresh users data
-  await loadUsers();
-
-  const onlineList = [];
-  for (const socketId in onlineUsers) {
-    const username = onlineUsers[socketId];
-    if (username !== currentUsername) {
-      onlineList.push({
-        username: username,
-        name: users[username].name,
-        avatar: users[username].avatar
-      });
-    }
-  }
+  console.log('👥 Online users request:', { currentUsername });
   
-  res.json(onlineList);
+  try {
+    // Load fresh users data
+    await loadUsers();
+    console.log('📚 Users loaded for online check');
+
+    const onlineList = [];
+    for (const socketId in onlineUsers) {
+      const username = onlineUsers[socketId];
+      if (username !== currentUsername && users[username]) {
+        onlineList.push({
+          username: username,
+          name: users[username].name,
+          avatar: users[username].avatar
+        });
+      }
+    }
+    
+    console.log('✅ Online users count:', onlineList.length);
+    res.json(onlineList);
+  } catch (err) {
+    console.error('❌ Online users error:', err.message);
+    res.status(500).json({ error: 'Failed to load online users' });
+  }
 });
 
 // Get chat history
@@ -288,7 +316,7 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 io.on('connection', (socket) => {
   console.log('User connected:', socket.id);
   
-  socket.on('userLogin', (username) => {
+  socket.on('userLogin', async (username) => {
     onlineUsers[socket.id] = username;
     socket.username = username;
     
@@ -298,9 +326,10 @@ io.on('connection', (socket) => {
     });
     
     // Load users for online list
-    loadUsers().then(() => {
+    try {
+      await loadUsers();
       const onlineList = Object.values(onlineUsers)
-        .filter(u => u !== username)
+        .filter(u => u !== username && users[u])
         .map(u => ({
           username: u,
           name: users[u].name,
@@ -308,7 +337,10 @@ io.on('connection', (socket) => {
         }));
       
       socket.emit('onlineUsers', onlineList);
-    });
+    } catch (err) {
+      console.error('Error loading online users for socket:', err.message);
+      socket.emit('onlineUsers', []);
+    }
   });
   
   socket.on('disconnect', () => {
