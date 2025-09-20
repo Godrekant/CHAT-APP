@@ -28,9 +28,11 @@ async function loadUsers() {
     const data = await fs.readFile(path.join(__dirname, 'users.json'), 'utf8');
     users = JSON.parse(data);
     console.log('✅ Loaded users from JSON file');
+    return users;
   } catch (err) {
     console.log('⚠️ No users.json found or invalid JSON - starting fresh');
     users = {};
+    return users;
   }
 }
 
@@ -41,6 +43,7 @@ async function saveUsers() {
     console.log('💾 Users saved to JSON file');
   } catch (err) {
     console.error('❌ Failed to save users:', err.message);
+    throw err;
   }
 }
 
@@ -92,23 +95,26 @@ app.post('/api/signup', async (req, res) => {
     return res.status(400).json({ error: 'All fields are required' });
   }
 
+  // Load users before checking
+  await loadUsers();
+
   if (users[username]) {
     console.log('❌ Username exists:', username);
     return res.status(400).json({ error: 'Username already exists' });
   }
 
-  const hashedPassword = hashPassword(password);
-  const avatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random`;
-  const lastSeen = Date.now();
-
-  users[username] = {
-    password: hashedPassword,
-    name: name,
-    avatar: avatar,
-    lastSeen: lastSeen
-  };
-
   try {
+    const hashedPassword = hashPassword(password);
+    const avatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random`;
+    const lastSeen = Date.now();
+
+    users[username] = {
+      password: hashedPassword,
+      name: name,
+      avatar: avatar,
+      lastSeen: lastSeen
+    };
+
     await saveUsers();
     console.log('✅ User created:', username);
     res.json({ success: true, message: 'User created successfully' });
@@ -118,7 +124,7 @@ app.post('/api/signup', async (req, res) => {
   }
 });
 
-// Login route
+// Login route - FIXED VERSION
 app.post('/api/login', async (req, res) => {
   console.log('========================================');
   console.log('🚀 LOGIN ATTEMPT');
@@ -136,48 +142,56 @@ app.post('/api/login', async (req, res) => {
     return res.status(400).json({ error: 'Username and password are required' });
   }
 
-  const user = users[username];
-  if (!user) {
-    console.log('❌ User not found:', username);
-    return res.status(401).json({ error: 'Invalid username or password' });
-  }
-
-  const hashedInputPassword = hashPassword(password);
-
-  console.log('🔑 Input hash:', hashedInputPassword);
-  console.log('🔑 Stored hash:', user.password);
-
-  if (user.password !== hashedInputPassword) {
-    console.log('❌ Password mismatch');
-    return res.status(401).json({ error: 'Invalid username or password' });
-  }
-
-  // Update lastSeen
-  user.lastSeen = Date.now();
   try {
-    await saveUsers();
-  } catch (err) {
-    console.error('⚠️ Failed to update lastSeen:', err.message);
-  }
+    // CRITICAL: Load users before validation
+    await loadUsers();
+    console.log('📚 Users loaded, count:', Object.keys(users).length);
 
-  console.log('✅ Login successful:', username);
-  res.json({ 
-    success: true, 
-    user: { 
-      username: user.username, 
-      name: user.name, 
-      avatar: user.avatar 
-    } 
-  });
+    const user = users[username];
+    if (!user) {
+      console.log('❌ User not found:', username);
+      return res.status(401).json({ error: 'Invalid username or password' });
+    }
+
+    const hashedInputPassword = hashPassword(password);
+
+    console.log('🔑 Input hash:', hashedInputPassword);
+    console.log('🔑 Stored hash:', user.password);
+
+    if (user.password !== hashedInputPassword) {
+      console.log('❌ Password mismatch for user:', username);
+      return res.status(401).json({ error: 'Invalid username or password' });
+    }
+
+    // Update lastSeen
+    user.lastSeen = Date.now();
+    await saveUsers();
+
+    console.log('✅ Login successful:', username);
+    res.json({ 
+      success: true, 
+      user: { 
+        username: user.username, 
+        name: user.name, 
+        avatar: user.avatar 
+      } 
+    });
+  } catch (err) {
+    console.log('❌ Login error:', err.message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 // Search users
-app.get('/api/users/search', (req, res) => {
+app.get('/api/users/search', async (req, res) => {
   const { query, currentUsername } = req.query;
   
   if (!query) {
     return res.json([]);
   }
+
+  // Load fresh users data
+  await loadUsers();
 
   const results = [];
   for (const username in users) {
@@ -197,10 +211,13 @@ app.get('/api/users/search', (req, res) => {
 });
 
 // Get online users
-app.get('/api/users/online', (req, res) => {
-  const onlineList = [];
+app.get('/api/users/online', async (req, res) => {
   const currentUsername = req.query.username;
   
+  // Load fresh users data
+  await loadUsers();
+
+  const onlineList = [];
   for (const socketId in onlineUsers) {
     const username = onlineUsers[socketId];
     if (username !== currentUsername) {
@@ -280,15 +297,18 @@ io.on('connection', (socket) => {
       isOnline: true
     });
     
-    const onlineList = Object.values(onlineUsers)
-      .filter(u => u !== username)
-      .map(u => ({
-        username: u,
-        name: users[u].name,
-        avatar: users[u].avatar
-      }));
-    
-    socket.emit('onlineUsers', onlineList);
+    // Load users for online list
+    loadUsers().then(() => {
+      const onlineList = Object.values(onlineUsers)
+        .filter(u => u !== username)
+        .map(u => ({
+          username: u,
+          name: users[u].name,
+          avatar: users[u].avatar
+        }));
+      
+      socket.emit('onlineUsers', onlineList);
+    });
   });
   
   socket.on('disconnect', () => {
