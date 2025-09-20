@@ -19,7 +19,7 @@ const io = socketIo(server, {
 const users = {}; // { username: { password, name, avatar, lastSeen } }
 const onlineUsers = {}; // { socketId: username }
 const chatHistory = {}; // { "user1_user2": [{ sender, content, type, timestamp, status }] }
-const callRooms = {}; // { roomId: { type: 'voice' | 'video' | 'conference', participants: [], maxParticipants } }
+const callRooms = {}; // { roomId: { type: 'voice' | 'video' | 'group' | 'conference', participants: [], maxParticipants } }
 const typingUsers = {}; // { "user1_user2": [typingUsernames] }
 
 // Setup multer for file uploads
@@ -42,60 +42,94 @@ app.get('/chat.html', (req, res) => {
   res.sendFile(path.join(__dirname, 'chat.html'));
 });
 
-// Signup route
+// Helper: Hash password
+function hashPassword(password) {
+  if (typeof password !== 'string') {
+    throw new Error('Password must be a string');
+  }
+  return crypto.createHash('sha256').update(password).digest('hex');
+}
+
+// Signup route — FIXED
 app.post('/api/signup', async (req, res) => {
   const { username, password, name } = req.body;
   
+  // Validate input
   if (!username || !password || !name) {
+    console.log('Signup failed: Missing fields', { username, password, name });
     return res.status(400).json({ error: 'All fields are required' });
   }
   
+  // Check if user exists
   if (users[username]) {
+    console.log('Signup failed: User exists', username);
     return res.status(400).json({ error: 'Username already exists' });
   }
   
-  // Simple password hashing (in production, use bcrypt)
-  const hashedPassword = crypto.createHash('sha256').update(password).digest('hex');
-  
-  users[username] = {
-    password: hashedPassword,
-    name: name,
-    avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random`,
-    lastSeen: Date.now()
-  };
-  
-  res.json({ success: true, message: 'User created successfully' });
+  try {
+    // Hash password
+    const hashedPassword = hashPassword(password);
+    
+    // Create user
+    users[username] = {
+      password: hashedPassword,
+      name: name,
+      avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random`,
+      lastSeen: Date.now()
+    };
+    
+    console.log('User created:', username);
+    res.json({ success: true, message: 'User created successfully' });
+  } catch (err) {
+    console.error('Signup error:', err.message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
-// Login route
+// Login route — FIXED
 app.post('/api/login', async (req, res) => {
   const { username, password } = req.body;
   
+  // Validate input
   if (!username || !password) {
+    console.log('Login failed: Missing username or password', { username, password });
     return res.status(400).json({ error: 'Username and password are required' });
   }
   
   const user = users[username];
   if (!user) {
+    console.log('Login failed: User not found', username);
     return res.status(401).json({ error: 'Invalid username or password' });
   }
   
-  const hashedPassword = crypto.createHash('sha256').update(password).digest('hex');
-  if (user.password !== hashedPassword) {
-    return res.status(401).json({ error: 'Invalid username or password' });
+  try {
+    // Hash the input password
+    const hashedInputPassword = hashPassword(password);
+    
+    // Compare with stored hash
+    if (user.password !== hashedInputPassword) {
+      console.log('Login failed: Password mismatch for user', username);
+      console.log('Input hash:', hashedInputPassword);
+      console.log('Stored hash:', user.password);
+      return res.status(401).json({ error: 'Invalid username or password' });
+    }
+    
+    // Update last seen
+    user.lastSeen = Date.now();
+    
+    console.log('Login successful:', username);
+    res.json({ 
+      success: true, 
+      user: { 
+        username: username, 
+        name: user.name, 
+        avatar: user.avatar 
+      } 
+    });
+  } catch (err) {
+    console.error('Login error:', err.message);
+    res.status(500).json({ error: 'Internal server error' });
   }
-  
-  // Update last seen
-  user.lastSeen = Date.now();
-  
-  res.json({ 
-    success: true, 
-    user: { 
-      username: username, 
-      name: user.name, 
-      avatar: user.avatar 
-    } 
-  });
 });
 
 // Search users route
@@ -246,7 +280,7 @@ io.on('connection', (socket) => {
       content: content,
       type: type,
       timestamp: Date.now(),
-      status: 'sent' // sent, delivered, read
+      status: 'sent'
     };
     
     // Store in chat history
@@ -492,7 +526,7 @@ io.on('connection', (socket) => {
             io.to(participantSocketId).emit('user-joined-room', {
               roomId: roomId,
               username: username,
-              participants: callRooms[roomId].participants
+              participants: [...callRooms[roomId].participants] // clone array
             });
           }
         }
@@ -526,7 +560,7 @@ io.on('connection', (socket) => {
             io.to(participantSocketId).emit('user-left-room', {
               roomId: roomId,
               username: username,
-              participants: callRooms[roomId].participants
+              participants: [...callRooms[roomId].participants] // clone array
             });
           }
         }
@@ -542,7 +576,7 @@ io.on('connection', (socket) => {
       socket.emit('room-info', {
         roomId: roomId,
         type: callRooms[roomId].type,
-        participants: callRooms[roomId].participants,
+        participants: [...callRooms[roomId].participants], // clone array
         maxParticipants: callRooms[roomId].maxParticipants
       });
     } else {
@@ -558,4 +592,5 @@ fs.mkdir(path.join(__dirname, 'uploads'), { recursive: true }).catch(console.err
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
+  console.log('Test signup/login with real strings (no copy-paste from password managers)');
 });
