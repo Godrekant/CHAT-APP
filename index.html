@@ -308,6 +308,16 @@
             background-color: #c62828;
         }
         
+        .search-debug {
+            padding: 10px;
+            background-color: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 5px;
+            margin: 10px;
+            font-size: 12px;
+            display: none;
+        }
+        
         /* Responsive Design */
         @media (max-width: 768px) {
             .auth-form {
@@ -406,9 +416,12 @@
             <div class="search-container">
                 <div class="search-box">
                     <span class="search-icon">🔍</span>
-                    <input type="text" id="searchInput" placeholder="Search...">
+                    <input type="text" id="searchInput" placeholder="Search users...">
                 </div>
             </div>
+            
+            <!-- Debug info for search -->
+            <div class="search-debug" id="searchDebug"></div>
             
             <div class="chat-list" id="chatList">
                 <!-- Chat items will be populated here -->
@@ -432,12 +445,14 @@
         const chatList = document.getElementById('chatList');
         const loginError = document.getElementById('loginError');
         const signupError = document.getElementById('signupError');
+        const searchDebug = document.getElementById('searchDebug');
         
         // Global variables
         let currentUser = null;
         let socket = null;
         let allUsers = [];
         let filteredUsers = [];
+        let searchTimeout = null;
         
         // Hide preloader when page loads
         window.addEventListener('load', () => {
@@ -462,7 +477,7 @@
             loginError.textContent = '';
         });
         
-        // Login functionality - FIXED: Auto redirect after successful login
+        // Login functionality
         loginBtn.addEventListener('click', () => {
             const username = document.getElementById('loginUsername').value.trim();
             const password = document.getElementById('loginPassword').value;
@@ -610,29 +625,42 @@
             });
         }
         
-        // Load chat list
-        function loadChatList() {
-            fetch(`/api/users/search?query=&currentUsername=${currentUser.username}`)
-                .then(response => response.json())
+        // Load chat list - FIXED: Always load all users first
+        function loadChatList(searchQuery = '') {
+            console.log('🔄 Loading chat list, search query:', searchQuery);
+            
+            // Show debug info
+            searchDebug.style.display = 'block';
+            searchDebug.innerHTML = `Searching for: "${searchQuery}"<br>Loading users...`;
+            
+            const url = searchQuery 
+                ? `/api/users/search?query=${encodeURIComponent(searchQuery)}&currentUsername=${currentUser.username}`
+                : `/api/users/search?query=&currentUsername=${currentUser.username}`;
+                
+            fetch(url)
+                .then(response => {
+                    console.log('📥 Search response status:', response.status);
+                    return response.json();
+                })
                 .then(users => {
-                    allUsers = users;
-                    filteredUsers = [...users];
+                    console.log('✅ Search results:', users);
+                    searchDebug.innerHTML += `<br>Found ${users.length} users`;
+                    
+                    if (searchQuery === '') {
+                        // Load all users
+                        allUsers = users;
+                        filteredUsers = [...users];
+                    } else {
+                        // Update filtered users for search
+                        filteredUsers = users;
+                    }
+                    
                     renderChatList(filteredUsers);
                 })
                 .catch(error => {
-                    console.error('Error loading users:', error);
-                });
-            
-            // Also get online users for status indicators
-            fetch(`/api/users/online?username=${currentUser.username}`)
-                .then(response => response.json())
-                .then(onlineUsers => {
-                    onlineUsers.forEach(user => {
-                        updateUserStatus(user.username, true);
-                    });
-                })
-                .catch(error => {
-                    console.error('Error loading online users:', error);
+                    console.error('❌ Error loading users:', error);
+                    searchDebug.innerHTML += `<br>Error: ${error.message}`;
+                    chatList.innerHTML = `<div style="text-align: center; padding: 20px; color: #e53935;">Error loading users: ${error.message}</div>`;
                 });
         }
         
@@ -641,7 +669,11 @@
             chatList.innerHTML = '';
             
             if (users.length === 0) {
-                chatList.innerHTML = '<div style="text-align: center; padding: 20px; color: #888;">No users found</div>';
+                const query = searchInput.value.trim();
+                const message = query 
+                    ? `No users found matching "${query}"`
+                    : 'No users found';
+                chatList.innerHTML = `<div style="text-align: center; padding: 20px; color: #888;">${message}</div>`;
                 return;
             }
             
@@ -659,7 +691,7 @@
                         <div class="chat-header">
                             <span class="username">${user.name}</span>
                             <span class="last-seen">
-                                ${user.isOnline ? '<span class="online-indicator"></span>Online' : '<span class="offline-indicator"></span>Last seen recently'}
+                                ${user.isOnline ? '<span class="online-indicator"></span>Online' : '<span class="offline-indicator"></span>Offline'}
                             </span>
                         </div>
                         <div class="last-message">${lastMessage || 'No messages yet'}</div>
@@ -714,7 +746,7 @@
                     if (isOnline) {
                         lastSeenEl.innerHTML = '<span class="online-indicator"></span>Online';
                     } else {
-                        lastSeenEl.innerHTML = '<span class="offline-indicator"></span>Last seen recently';
+                        lastSeenEl.innerHTML = '<span class="offline-indicator"></span>Offline';
                     }
                 }
             });
@@ -739,20 +771,30 @@
             });
         }
         
-        // Search functionality
+        // Search functionality - FIXED: Debounced search with immediate feedback
         searchInput.addEventListener('input', (e) => {
-            const query = e.target.value.toLowerCase();
+            const query = e.target.value.trim();
+            console.log('🔍 Search input:', query);
             
-            if (query === '') {
-                filteredUsers = [...allUsers];
-            } else {
-                filteredUsers = allUsers.filter(user => 
-                    user.username.toLowerCase().includes(query) || 
-                    user.name.toLowerCase().includes(query)
-                );
+            // Clear previous timeout
+            if (searchTimeout) {
+                clearTimeout(searchTimeout);
             }
             
-            renderChatList(filteredUsers);
+            // Update debug info
+            searchDebug.style.display = 'block';
+            searchDebug.innerHTML = `Searching for: "${query}"<br>Typing...`;
+            
+            // Debounce search to avoid too many requests
+            searchTimeout = setTimeout(() => {
+                if (query === '') {
+                    // Load all users when search is cleared
+                    loadChatList('');
+                } else {
+                    // Search for users
+                    loadChatList(query);
+                }
+            }, 300); // 300ms delay
         });
         
         // Add enter key support for login and signup
@@ -780,7 +822,7 @@
                     authSection.style.display = 'none';
                     chatSection.style.display = 'flex';
                     initSocket();
-                    loadChatList();
+                    loadChatList(); // Load all users initially
                     console.log('✅ Auto-logged in from localStorage');
                 } catch (e) {
                     console.error('Error parsing stored user:', e);
