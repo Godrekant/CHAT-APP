@@ -698,7 +698,14 @@
             // Get current user from localStorage (set by login)
             const storedUser = localStorage.getItem('currentUser');
             if (storedUser) {
-                currentUser = JSON.parse(storedUser);
+                try {
+                    currentUser = JSON.parse(storedUser);
+                } catch (e) {
+                    console.error('Error parsing stored user:', e);
+                    localStorage.removeItem('currentUser');
+                    window.location.href = '/';
+                    return;
+                }
             } else {
                 // Redirect to login if no user
                 window.location.href = '/';
