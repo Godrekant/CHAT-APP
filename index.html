@@ -28,6 +28,42 @@
             height: 100%;
         }
         
+        /* Preloader */
+        .preloader {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #ffffff;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+        }
+        
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 5px solid #f3f3f3;
+            border-top: 5px solid #1877f2;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .preloader-text {
+            font-size: 18px;
+            color: #1877f2;
+            font-weight: 500;
+        }
+        
         /* Auth Section */
         .auth-container {
             display: flex;
@@ -95,6 +131,11 @@
             background-color: #166fe5;
         }
         
+        .btn:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        
         .form-footer {
             text-align: center;
             margin-top: 20px;
@@ -108,6 +149,13 @@
         
         .form-footer a:hover {
             text-decoration: underline;
+        }
+        
+        .error-message {
+            color: #e53935;
+            text-align: center;
+            margin-top: 15px;
+            font-weight: 500;
         }
         
         /* Chat List Section */
@@ -300,6 +348,12 @@
     </style>
 </head>
 <body>
+    <!-- Preloader -->
+    <div class="preloader" id="preloader">
+        <div class="spinner"></div>
+        <div class="preloader-text">Loading Chat App...</div>
+    </div>
+    
     <div class="container">
         <!-- Authentication Section -->
         <div class="auth-container" id="authSection">
@@ -317,6 +371,7 @@
                 <div class="form-footer">
                     <p>Don't have an account? <a href="#" id="showSignup">Sign up</a></p>
                 </div>
+                <div class="error-message" id="loginError"></div>
             </div>
             
             <div class="auth-form" id="signupForm" style="display: none;">
@@ -337,6 +392,7 @@
                 <div class="form-footer">
                     <p>Already have an account? <a href="#" id="showLogin">Log in</a></p>
                 </div>
+                <div class="error-message" id="signupError"></div>
             </div>
         </div>
         
@@ -362,6 +418,7 @@
 
     <script>
         // DOM Elements
+        const preloader = document.getElementById('preloader');
         const authSection = document.getElementById('authSection');
         const chatSection = document.getElementById('chatSection');
         const loginForm = document.getElementById('loginForm');
@@ -373,6 +430,8 @@
         const logoutBtn = document.getElementById('logoutBtn');
         const searchInput = document.getElementById('searchInput');
         const chatList = document.getElementById('chatList');
+        const loginError = document.getElementById('loginError');
+        const signupError = document.getElementById('signupError');
         
         // Global variables
         let currentUser = null;
@@ -380,11 +439,19 @@
         let allUsers = [];
         let filteredUsers = [];
         
+        // Hide preloader when page loads
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                preloader.style.display = 'none';
+            }, 500);
+        });
+        
         // Show signup form
         showSignup.addEventListener('click', (e) => {
             e.preventDefault();
             loginForm.style.display = 'none';
             signupForm.style.display = 'block';
+            signupError.textContent = '';
         });
         
         // Show login form
@@ -392,6 +459,7 @@
             e.preventDefault();
             signupForm.style.display = 'none';
             loginForm.style.display = 'block';
+            loginError.textContent = '';
         });
         
         // Login functionality
@@ -399,10 +467,17 @@
             const username = document.getElementById('loginUsername').value.trim();
             const password = document.getElementById('loginPassword').value;
             
+            // Clear previous errors
+            loginError.textContent = '';
+            
             if (!username || !password) {
-                alert('Please enter both username and password');
+                loginError.textContent = 'Please enter both username and password';
                 return;
             }
+            
+            // Disable button during request
+            loginBtn.disabled = true;
+            loginBtn.textContent = 'Logging in...';
             
             fetch('/api/login', {
                 method: 'POST',
@@ -415,17 +490,23 @@
             .then(data => {
                 if (data.success) {
                     currentUser = data.user;
+                    localStorage.setItem('currentUser', JSON.stringify(currentUser));
                     initSocket();
                     loadChatList();
                     authSection.style.display = 'none';
                     chatSection.style.display = 'flex';
                 } else {
-                    alert(data.error || 'Login failed');
+                    loginError.textContent = data.error || 'Login failed';
                 }
             })
             .catch(error => {
                 console.error('Login error:', error);
-                alert('Login failed. Please try again.');
+                loginError.textContent = 'Login failed. Please try again.';
+            })
+            .finally(() => {
+                // Re-enable button
+                loginBtn.disabled = false;
+                loginBtn.textContent = 'Log In';
             });
         });
         
@@ -435,10 +516,17 @@
             const username = document.getElementById('signupUsername').value.trim();
             const password = document.getElementById('signupPassword').value;
             
+            // Clear previous errors
+            signupError.textContent = '';
+            
             if (!name || !username || !password) {
-                alert('Please fill in all fields');
+                signupError.textContent = 'Please fill in all fields';
                 return;
             }
+            
+            // Disable button during request
+            signupBtn.disabled = true;
+            signupBtn.textContent = 'Creating account...';
             
             fetch('/api/signup', {
                 method: 'POST',
@@ -459,12 +547,17 @@
                     document.getElementById('signupUsername').value = '';
                     document.getElementById('signupPassword').value = '';
                 } else {
-                    alert(data.error || 'Signup failed');
+                    signupError.textContent = data.error || 'Signup failed';
                 }
             })
             .catch(error => {
                 console.error('Signup error:', error);
-                alert('Signup failed. Please try again.');
+                signupError.textContent = 'Signup failed. Please try again.';
+            })
+            .finally(() => {
+                // Re-enable button
+                signupBtn.disabled = false;
+                signupBtn.textContent = 'Sign Up';
             });
         });
         
@@ -475,6 +568,7 @@
                 socket = null;
             }
             
+            localStorage.removeItem('currentUser');
             currentUser = null;
             chatSection.style.display = 'none';
             authSection.style.display = 'flex';
@@ -484,6 +578,7 @@
             // Clear login form
             document.getElementById('loginUsername').value = '';
             document.getElementById('loginPassword').value = '';
+            loginError.textContent = '';
         });
         
         // Initialize Socket.IO connection
@@ -500,7 +595,6 @@
             
             // Handle online users list
             socket.on('onlineUsers', (users) => {
-                // We'll use this to update our user list
                 loadChatList();
             });
             
@@ -512,7 +606,6 @@
         
         // Load chat list
         function loadChatList() {
-            // Get all users except current user
             fetch(`/api/users/search?query=&currentUsername=${currentUser.username}`)
                 .then(response => response.json())
                 .then(users => {
@@ -528,7 +621,6 @@
             fetch(`/api/users/online?username=${currentUser.username}`)
                 .then(response => response.json())
                 .then(onlineUsers => {
-                    // Update status of online users
                     onlineUsers.forEach(user => {
                         updateUserStatus(user.username, true);
                     });
@@ -579,8 +671,6 @@
         
         // Get last message for a conversation
         function getLastMessage(currentUser, targetUser) {
-            // In a real app, we would fetch this from the server
-            // For now, we'll simulate it
             const chatKey1 = `${currentUser}_${targetUser}`;
             const chatKey2 = `${targetUser}_${currentUser}`;
             
@@ -674,6 +764,23 @@
         
         // Initialize chatHistory object for message previews
         window.chatHistory = {};
+        
+        // Check if user is already logged in
+        document.addEventListener('DOMContentLoaded', () => {
+            const storedUser = localStorage.getItem('currentUser');
+            if (storedUser) {
+                try {
+                    currentUser = JSON.parse(storedUser);
+                    authSection.style.display = 'none';
+                    chatSection.style.display = 'flex';
+                    initSocket();
+                    loadChatList();
+                } catch (e) {
+                    console.error('Error parsing stored user:', e);
+                    localStorage.removeItem('currentUser');
+                }
+            }
+        });
     </script>
 </body>
 </html>
