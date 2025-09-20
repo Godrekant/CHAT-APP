@@ -5,7 +5,6 @@ const path = require('path');
 const fs = require('fs').promises;
 const multer = require('multer');
 const crypto = require('crypto');
-const sqlite3 = require('sqlite3').verbose();
 
 const app = express();
 const server = http.createServer(app);
@@ -16,47 +15,43 @@ const io = socketIo(server, {
   }
 });
 
-// Initialize SQLite Database
-const db = new sqlite3.Database('./chatapp.db', (err) => {
-  if (err) {
-    console.error('❌ Could not connect to SQLite database:', err.message);
-  } else {
-    console.log('✅ Connected to SQLite database');
-    
-    // Create users table if not exists
-    db.run(`
-      CREATE TABLE IF NOT EXISTS users (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        username TEXT UNIQUE NOT NULL,
-        password TEXT NOT NULL,
-        name TEXT NOT NULL,
-        avatar TEXT,
-        lastSeen INTEGER
-      )
-    `, (err) => {
-      if (err) {
-        console.error('❌ Table creation failed:', err.message);
-      } else {
-        console.log('✅ Users table ready');
-      }
-    });
+// In-memory storage (except users - now in JSON)
+let users = {}; // Will load from users.json
+const onlineUsers = {};
+const chatHistory = {};
+const callRooms = {};
+const typingUsers = {};
+
+// Load users from JSON file on startup
+async function loadUsers() {
+  try {
+    const data = await fs.readFile(path.join(__dirname, 'users.json'), 'utf8');
+    users = JSON.parse(data);
+    console.log('✅ Loaded users from JSON file');
+  } catch (err) {
+    console.log('⚠️ No users.json found or invalid JSON - starting fresh');
+    users = {};
   }
-});
+}
 
-// In-memory storage (except users)
-const onlineUsers = {}; // { socketId: username }
-const chatHistory = {}; // { "user1_user2": [{ sender, content, type, timestamp, status }] }
-const callRooms = {}; // { roomId: { type, participants, maxParticipants } }
-const typingUsers = {}; // { "user1_user2": [typingUsernames] }
+// Save users to JSON file
+async function saveUsers() {
+  try {
+    await fs.writeFile(path.join(__dirname, 'users.json'), JSON.stringify(users, null, 2));
+    console.log('💾 Users saved to JSON file');
+  } catch (err) {
+    console.error('❌ Failed to save users:', err.message);
+  }
+}
 
-// Setup multer for file uploads
+// Setup multer
 const storage = multer.memoryStorage();
 const upload = multer({ 
   storage: storage,
-  limits: { fileSize: 10 * 1024 * 1024 } // 10MB limit
+  limits: { fileSize: 10 * 1024 * 1024 }
 });
 
-// Serve static files
+// Middleware
 app.use(express.static(path.join(__dirname)));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -78,103 +73,105 @@ function hashPassword(password) {
   return crypto.createHash('sha256').update(password.trim()).digest('hex');
 }
 
-// Signup route — STORES IN SQLITE
-app.post('/api/signup', (req, res) => {
+// Signup route
+app.post('/api/signup', async (req, res) => {
+  console.log('========================================');
+  console.log('🚀 SIGNUP ATTEMPT');
+  console.log('========================================');
+  
   let { username, password, name } = req.body;
 
-  // Sanitize
-  username = (username || '').toString().trim();
-  password = (password || '').toString().trim();
-  name = (name || '').toString().trim();
+  username = username ? String(username).trim() : '';
+  password = password ? String(password).trim() : '';
+  name = name ? String(name).trim() : '';
+
+  console.log('📝 Input:', { username, password, name });
 
   if (!username || !password || !name) {
-    console.log('❌ Signup failed: Missing fields', { username, password, name });
+    console.log('❌ Missing fields');
     return res.status(400).json({ error: 'All fields are required' });
+  }
+
+  if (users[username]) {
+    console.log('❌ Username exists:', username);
+    return res.status(400).json({ error: 'Username already exists' });
   }
 
   const hashedPassword = hashPassword(password);
   const avatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random`;
   const lastSeen = Date.now();
 
-  // Insert into SQLite
-  db.run(
-    `INSERT INTO users (username, password, name, avatar, lastSeen) VALUES (?, ?, ?, ?, ?)`,
-    [username, hashedPassword, name, avatar, lastSeen],
-    function(err) {
-      if (err) {
-        if (err.message.includes('UNIQUE constraint failed')) {
-          console.log('❌ Signup failed: Username exists', username);
-          return res.status(400).json({ error: 'Username already exists' });
-        }
-        console.error('❌ SQLite insert error:', err.message);
-        return res.status(500).json({ error: 'Internal server error' });
-      }
-      
-      console.log('✅ User created in SQLite:', username);
-      res.json({ success: true, message: 'User created successfully' });
-    }
-  );
+  users[username] = {
+    password: hashedPassword,
+    name: name,
+    avatar: avatar,
+    lastSeen: lastSeen
+  };
+
+  try {
+    await saveUsers();
+    console.log('✅ User created:', username);
+    res.json({ success: true, message: 'User created successfully' });
+  } catch (err) {
+    console.log('❌ Save failed:', err.message);
+    res.status(500).json({ error: 'Failed to save user' });
+  }
 });
 
-// Login route — CHECKS SQLITE
-app.post('/api/login', (req, res) => {
+// Login route
+app.post('/api/login', async (req, res) => {
+  console.log('========================================');
+  console.log('🚀 LOGIN ATTEMPT');
+  console.log('========================================');
+  
   let { username, password } = req.body;
 
-  username = (username || '').toString().trim();
-  password = (password || '').toString().trim();
+  username = username ? String(username).trim() : '';
+  password = password ? String(password).trim() : '';
+
+  console.log('📝 Input:', { username, password });
 
   if (!username || !password) {
-    console.log('❌ Login failed: Missing username or password', { username, password });
+    console.log('❌ Missing fields');
     return res.status(400).json({ error: 'Username and password are required' });
+  }
+
+  const user = users[username];
+  if (!user) {
+    console.log('❌ User not found:', username);
+    return res.status(401).json({ error: 'Invalid username or password' });
   }
 
   const hashedInputPassword = hashPassword(password);
 
-  // Query SQLite
-  db.get(
-    `SELECT username, name, avatar, password FROM users WHERE username = ?`,
-    [username],
-    (err, row) => {
-      if (err) {
-        console.error('❌ SQLite query error:', err.message);
-        return res.status(500).json({ error: 'Internal server error' });
-      }
+  console.log('🔑 Input hash:', hashedInputPassword);
+  console.log('🔑 Stored hash:', user.password);
 
-      if (!row) {
-        console.log('❌ Login failed: User not found', username);
-        return res.status(401).json({ error: 'Invalid username or password' });
-      }
+  if (user.password !== hashedInputPassword) {
+    console.log('❌ Password mismatch');
+    return res.status(401).json({ error: 'Invalid username or password' });
+  }
 
-      if (row.password !== hashedInputPassword) {
-        console.log('❌ Login failed: Password mismatch for user', username);
-        console.log('   Input hash:', hashedInputPassword);
-        console.log('   Stored hash:', row.password);
-        return res.status(401).json({ error: 'Invalid username or password' });
-      }
+  // Update lastSeen
+  user.lastSeen = Date.now();
+  try {
+    await saveUsers();
+  } catch (err) {
+    console.error('⚠️ Failed to update lastSeen:', err.message);
+  }
 
-      // Update lastSeen
-      db.run(
-        `UPDATE users SET lastSeen = ? WHERE username = ?`,
-        [Date.now(), username],
-        (err) => {
-          if (err) console.error('Failed to update lastSeen:', err.message);
-        }
-      );
-
-      console.log('✅ Login successful:', username);
-      res.json({ 
-        success: true, 
-        user: { 
-          username: row.username, 
-          name: row.name, 
-          avatar: row.avatar 
-        } 
-      });
-    }
-  );
+  console.log('✅ Login successful:', username);
+  res.json({ 
+    success: true, 
+    user: { 
+      username: user.username, 
+      name: user.name, 
+      avatar: user.avatar 
+    } 
+  });
 });
 
-// Search users route — QUERIES SQLITE
+// Search users
 app.get('/api/users/search', (req, res) => {
   const { query, currentUsername } = req.query;
   
@@ -182,60 +179,43 @@ app.get('/api/users/search', (req, res) => {
     return res.json([]);
   }
 
-  // Search users by username or name
-  const sql = `
-    SELECT username, name, avatar 
-    FROM users 
-    WHERE username != ? 
-    AND (username LIKE ? OR name LIKE ?)
-    LIMIT 20
-  `;
-  
-  const searchTerm = `%${query}%`;
-  
-  db.all(sql, [currentUsername, searchTerm, searchTerm], (err, rows) => {
-    if (err) {
-      console.error('❌ Search query error:', err.message);
-      return res.status(500).json({ error: 'Search failed' });
+  const results = [];
+  for (const username in users) {
+    if (username !== currentUsername && 
+        (username.toLowerCase().includes(query.toLowerCase()) || 
+         users[username].name.toLowerCase().includes(query.toLowerCase()))) {
+      results.push({
+        username: username,
+        name: users[username].name,
+        avatar: users[username].avatar,
+        isOnline: !!Object.values(onlineUsers).find(u => u === username)
+      });
     }
-
-    // Add online status
-    const results = rows.map(row => {
-      const isOnline = Object.values(onlineUsers).includes(row.username);
-      return {
-        ...row,
-        isOnline: isOnline
-      };
-    });
-
-    res.json(results);
-  });
-});
-
-// Get online users — COMBINES SQLITE + in-memory
-app.get('/api/users/online', (req, res) => {
-  const currentUsername = req.query.username || '';
-  
-  const onlineUsernames = Object.values(onlineUsers).filter(u => u !== currentUsername);
-  
-  if (onlineUsernames.length === 0) {
-    return res.json([]);
   }
-
-  // Get details from SQLite
-  const placeholders = onlineUsernames.map(() => '?').join(',');
-  const sql = `SELECT username, name, avatar FROM users WHERE username IN (${placeholders})`;
   
-  db.all(sql, onlineUsernames, (err, rows) => {
-    if (err) {
-      console.error('❌ Online users query error:', err.message);
-      return res.status(500).json({ error: 'Failed to load online users' });
-    }
-    res.json(rows);
-  });
+  res.json(results);
 });
 
-// Get chat history — STILL IN-MEMORY (you can persist later)
+// Get online users
+app.get('/api/users/online', (req, res) => {
+  const onlineList = [];
+  const currentUsername = req.query.username;
+  
+  for (const socketId in onlineUsers) {
+    const username = onlineUsers[socketId];
+    if (username !== currentUsername) {
+      onlineList.push({
+        username: username,
+        name: users[username].name,
+        avatar: users[username].avatar
+      });
+    }
+  }
+  
+  res.json(onlineList);
+});
+
+// Get chat history
 app.get('/api/chat/history', (req, res) => {
   const { currentUser, targetUser } = req.query;
   
@@ -256,8 +236,8 @@ app.get('/api/chat/history', (req, res) => {
   res.json(messages);
 });
 
-// File upload endpoint
-app.post('/api/upload', upload.single('file'), (req, res) => {
+// File upload
+app.post('/api/upload', upload.single('file'), async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: 'No file uploaded' });
   }
@@ -268,28 +248,26 @@ app.post('/api/upload', upload.single('file'), (req, res) => {
   
   const uploadDir = path.join(__dirname, 'uploads');
   
-  fs.mkdir(uploadDir, { recursive: true })
-    .then(() => {
-      return fs.writeFile(path.join(uploadDir, finalFileName), req.file.buffer);
-    })
-    .then(() => {
-      res.json({ 
-        success: true, 
-        url: `/uploads/${finalFileName}`,
-        fileName: req.file.originalname,
-        type: req.file.mimetype
-      });
-    })
-    .catch(err => {
-      console.error('Upload error:', err);
-      res.status(500).json({ error: 'File upload failed' });
+  try {
+    await fs.mkdir(uploadDir, { recursive: true });
+    await fs.writeFile(path.join(uploadDir, finalFileName), req.file.buffer);
+    
+    res.json({ 
+      success: true, 
+      url: `/uploads/${finalFileName}`,
+      fileName: req.file.originalname,
+      type: req.file.mimetype
     });
+  } catch (err) {
+    console.error('Upload error:', err);
+    res.status(500).json({ error: 'File upload failed' });
+  }
 });
 
 // Serve uploaded files
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// Socket.IO connection handling — UNCHANGED
+// Socket.IO connection handling
 io.on('connection', (socket) => {
   console.log('User connected:', socket.id);
   
@@ -306,8 +284,8 @@ io.on('connection', (socket) => {
       .filter(u => u !== username)
       .map(u => ({
         username: u,
-        name: 'Loading...', // Frontend will fetch details
-        avatar: ''
+        name: users[u].name,
+        avatar: users[u].avatar
       }));
     
     socket.emit('onlineUsers', onlineList);
@@ -324,9 +302,7 @@ io.on('connection', (socket) => {
     console.log('User disconnected:', socket.id);
   });
 
-  // === MESSAGING, TYPING, CALLS — ALL UNCHANGED ===
-  // (These remain in-memory for simplicity. You can persist them later if needed.)
-
+  // === ALL OTHER SOCKET EVENTS REMAIN THE SAME ===
   socket.on('sendMessage', (data) => {
     const { sender, recipient, content, type = 'text' } = data;
     const message = {
@@ -614,22 +590,13 @@ io.on('connection', (socket) => {
 // Create uploads directory
 fs.mkdir(path.join(__dirname, 'uploads'), { recursive: true }).catch(console.error);
 
-// Close DB on process exit
-process.on('SIGINT', () => {
-  db.close((err) => {
-    if (err) {
-      console.error('❌ Error closing SQLite database:', err.message);
-    } else {
-      console.log('✅ SQLite database closed');
-    }
-    process.exit(0);
+// Load users on startup
+loadUsers().then(() => {
+  // Start server
+  const PORT = process.env.PORT || 3000;
+  server.listen(PORT, () => {
+    console.log(`🚀 Server running on port ${PORT}`);
+    console.log('💾 Users stored in users.json');
+    console.log('📱 Perfect for Termux - data persists!');
   });
-});
-
-// Start server
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-  console.log('🔐 Users now stored in SQLite (chatapp.db)');
-  console.log('📱 Perfect for Termux — data persists after restart!');
 });
