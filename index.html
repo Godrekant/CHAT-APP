@@ -462,7 +462,7 @@
             loginError.textContent = '';
         });
         
-        // Login functionality
+        // Login functionality - FIXED: Auto redirect after successful login
         loginBtn.addEventListener('click', () => {
             const username = document.getElementById('loginUsername').value.trim();
             const password = document.getElementById('loginPassword').value;
@@ -491,10 +491,16 @@
                 if (data.success) {
                     currentUser = data.user;
                     localStorage.setItem('currentUser', JSON.stringify(currentUser));
-                    initSocket();
-                    loadChatList();
+                    
+                    // AUTO REDIRECT: Hide auth section and show chat section
                     authSection.style.display = 'none';
                     chatSection.style.display = 'flex';
+                    
+                    // Initialize socket and load chat list
+                    initSocket();
+                    loadChatList();
+                    
+                    console.log('✅ Auto-redirect to chat list after login');
                 } else {
                     loginError.textContent = data.error || 'Login failed';
                 }
@@ -765,7 +771,7 @@
         // Initialize chatHistory object for message previews
         window.chatHistory = {};
         
-        // Check if user is already logged in
+        // Check if user is already logged in on page load
         document.addEventListener('DOMContentLoaded', () => {
             const storedUser = localStorage.getItem('currentUser');
             if (storedUser) {
@@ -775,6 +781,7 @@
                     chatSection.style.display = 'flex';
                     initSocket();
                     loadChatList();
+                    console.log('✅ Auto-logged in from localStorage');
                 } catch (e) {
                     console.error('Error parsing stored user:', e);
                     localStorage.removeItem('currentUser');
