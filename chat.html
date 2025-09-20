@@ -2,14 +2,14 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Chat with User</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Chat</title>
     <style>
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
         }
         
         body {
@@ -17,6 +17,7 @@
             height: 100vh;
             display: flex;
             flex-direction: column;
+            overflow: hidden;
         }
         
         .container {
@@ -25,19 +26,21 @@
             padding: 0;
             display: flex;
             flex-direction: column;
-            height: 100%;
+            height: 100vh;
+            background-color: #ffffff;
         }
         
         /* Header */
         .chat-header {
             display: flex;
             align-items: center;
-            padding: 10px 15px;
-            background-color: #ffffff;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            padding: 10px 16px;
+            background-color: #008069;
+            color: white;
             position: sticky;
             top: 0;
             z-index: 100;
+            min-height: 60px;
         }
         
         .back-btn {
@@ -45,42 +48,60 @@
             border: none;
             font-size: 24px;
             cursor: pointer;
-            margin-right: 10px;
-            color: #1877f2;
+            margin-right: 16px;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+        }
+        
+        .back-btn:hover {
+            background-color: rgba(255, 255, 255, 0.1);
         }
         
         .user-info {
             display: flex;
             align-items: center;
             flex: 1;
+            min-width: 0;
         }
         
         .avatar {
             width: 40px;
             height: 40px;
             border-radius: 50%;
-            margin-right: 15px;
+            margin-right: 12px;
             object-fit: cover;
         }
         
         .user-details {
             flex: 1;
+            min-width: 0;
         }
         
         .username {
-            font-weight: 600;
+            font-weight: 500;
             font-size: 16px;
-            color: #111;
+            color: white;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
         
         .status {
-            font-size: 12px;
-            color: #888;
+            font-size: 13px;
+            color: rgba(255, 255, 255, 0.9);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
         
         .header-actions {
             display: flex;
-            gap: 15px;
+            gap: 20px;
         }
         
         .action-btn {
@@ -88,56 +109,72 @@
             border: none;
             font-size: 20px;
             cursor: pointer;
-            color: #555;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+        }
+        
+        .action-btn:hover {
+            background-color: rgba(255, 255, 255, 0.1);
         }
         
         /* Messages Area */
         .messages-container {
             flex: 1;
             overflow-y: auto;
-            padding: 15px;
+            padding: 16px;
             display: flex;
             flex-direction: column;
-            gap: 15px;
-            background-color: #f0f2f5;
+            gap: 8px;
+            background-color: #e5ddd5;
+            background-image: url("data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M11 18c3.866 0 7-3.134 7-7s-3.134-7-7-7-7 3.134-7 7 3.134 7 7 7zm48 25c3.866 0 7-3.134 7-7s-3.134-7-7-7-7 3.134-7 7 3.134 7 7 7zm-43-7c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zm63 31c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zM34 90c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zm56-76c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zM12 86c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm28-65c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm23-11c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm-6 60c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm29 22c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zM32 63c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm57-13c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm-9-21c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zM60 91c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zM35 41c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zM12 60c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2z' fill='%239C92AC' fill-opacity='0.05' fill-rule='evenodd'/%3E%3C/svg%3E");
         }
         
         .message {
-            max-width: 70%;
-            padding: 10px 15px;
-            border-radius: 18px;
+            max-width: 75%;
+            padding: 8px 12px;
+            border-radius: 7.5px;
             position: relative;
             word-wrap: break-word;
+            font-size: 15px;
+            line-height: 1.4;
         }
         
         .message-received {
             background-color: white;
             align-self: flex-start;
-            border-bottom-left-radius: 4px;
+            border-top-left-radius: 0;
         }
         
         .message-sent {
-            background-color: #dcf8c6;
+            background-color: #d9fdd3;
             align-self: flex-end;
-            border-bottom-right-radius: 4px;
+            border-top-right-radius: 0;
         }
         
         .message-content {
             font-size: 15px;
             line-height: 1.4;
+            color: #111;
         }
         
         .message-image {
             max-width: 100%;
             max-height: 300px;
-            border-radius: 12px;
+            border-radius: 7.5px;
             cursor: pointer;
+            margin: 4px 0;
         }
         
         .message-voice {
             display: flex;
             align-items: center;
             gap: 10px;
+            padding: 8px 0;
         }
         
         .voice-player {
@@ -155,6 +192,16 @@
             font-size: 18px;
             cursor: pointer;
             color: #333;
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+        }
+        
+        .play-btn:hover {
+            background-color: rgba(0, 0, 0, 0.1);
         }
         
         .voice-duration {
@@ -164,34 +211,39 @@
         
         .message-status {
             font-size: 11px;
-            color: #888;
+            color: #667781;
             text-align: right;
-            margin-top: 5px;
+            margin-top: 4px;
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            gap: 2px;
         }
         
         .delivered {
-            color: #888;
+            color: #667781;
         }
         
         .read {
-            color: #1877f2;
+            color: #53bdeb;
         }
         
         .typing-indicator {
             align-self: flex-start;
             background-color: white;
-            padding: 10px 15px;
-            border-radius: 18px;
-            border-bottom-left-radius: 4px;
+            padding: 8px 12px;
+            border-radius: 7.5px;
+            border-top-left-radius: 0;
             display: flex;
             align-items: center;
             gap: 5px;
+            max-width: 120px;
         }
         
         .typing-dot {
             width: 8px;
             height: 8px;
-            background-color: #888;
+            background-color: #667781;
             border-radius: 50%;
             animation: typing 1.4s infinite ease-in-out;
         }
@@ -219,17 +271,18 @@
         
         /* Input Area */
         .input-container {
-            padding: 10px 15px;
-            background-color: white;
-            border-top: 1px solid #e5e5e5;
+            padding: 8px 16px;
+            background-color: #f0f2f5;
+            border-top: 1px solid #e9edef;
             display: flex;
             align-items: center;
             gap: 10px;
+            min-height: 62px;
         }
         
         .input-actions {
             display: flex;
-            gap: 10px;
+            gap: 12px;
         }
         
         .action-icon {
@@ -239,27 +292,40 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            background-color: #f0f2f5;
+            background-color: #ffffff;
             cursor: pointer;
             font-size: 20px;
-            color: #555;
+            color: #54656f;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+        }
+        
+        .action-icon:hover {
+            background-color: #f0f2f5;
         }
         
         .message-input-container {
             flex: 1;
             position: relative;
+            background-color: white;
+            border-radius: 20px;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
         }
         
         .message-input {
             width: 100%;
-            padding: 10px 15px;
+            padding: 10px 16px;
             border-radius: 20px;
-            border: 1px solid #e5e5e5;
+            border: none;
             font-size: 15px;
             outline: none;
             resize: none;
-            max-height: 120px;
-            overflow-y: auto;
+            max-height: 100px;
+            background-color: transparent;
+            font-family: inherit;
+        }
+        
+        .message-input:focus {
+            outline: none;
         }
         
         .emoji-picker {
@@ -267,12 +333,15 @@
             bottom: 50px;
             left: 0;
             background: white;
-            border: 1px solid #e5e5e5;
+            border: 1px solid #e9edef;
             border-radius: 10px;
             padding: 10px;
             box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
             display: none;
             z-index: 1000;
+            max-height: 200px;
+            overflow-y: auto;
+            width: 280px;
         }
         
         .emoji-btn {
@@ -282,6 +351,11 @@
             cursor: pointer;
             padding: 5px;
             border-radius: 5px;
+            width: 40px;
+            height: 40px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
         }
         
         .emoji-btn:hover {
@@ -292,7 +366,7 @@
             width: 44px;
             height: 44px;
             border-radius: 50%;
-            background-color: #1877f2;
+            background-color: #008069;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -300,10 +374,11 @@
             border: none;
             color: white;
             font-size: 20px;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
         }
         
         .send-btn:disabled {
-            background-color: #ccc;
+            background-color: #667781;
             cursor: not-allowed;
         }
         
@@ -329,6 +404,8 @@
             border-radius: 15px;
             text-align: center;
             box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+            width: 90%;
+            max-width: 350px;
         }
         
         .recording-icon {
@@ -339,8 +416,9 @@
         
         .recording-text {
             font-size: 18px;
-            font-weight: 600;
+            font-weight: 500;
             margin-bottom: 20px;
+            color: #111;
         }
         
         .recording-timer {
@@ -354,10 +432,15 @@
             background-color: #e53935;
             color: white;
             border: none;
-            padding: 10px 25px;
+            padding: 12px 25px;
             border-radius: 20px;
             font-size: 16px;
             cursor: pointer;
+            font-weight: 500;
+        }
+        
+        .recording-cancel:hover {
+            background-color: #c62828;
         }
         
         /* Call UI */
@@ -409,7 +492,7 @@
         
         .call-name {
             font-size: 24px;
-            font-weight: 600;
+            font-weight: 500;
             margin-bottom: 10px;
         }
         
@@ -451,53 +534,16 @@
             color: #333;
         }
         
-        /* Participant grid for group calls */
-        .participant-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-            gap: 15px;
-            width: 100%;
-            padding: 20px;
-        }
-        
-        .participant-video {
-            position: relative;
-            width: 100%;
-            height: 0;
-            padding-bottom: 56.25%;
-            border-radius: 10px;
-            background-color: #000;
-        }
-        
-        .participant-video video {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            border-radius: 10px;
-        }
-        
-        .participant-name {
-            position: absolute;
-            bottom: 10px;
-            left: 10px;
-            color: white;
-            background-color: rgba(0, 0, 0, 0.5);
-            padding: 5px 10px;
-            border-radius: 10px;
-            font-size: 14px;
-        }
-        
         /* Responsive Design */
         @media (max-width: 768px) {
             .chat-header {
                 padding: 8px 12px;
+                min-height: 56px;
             }
             
             .avatar {
-                width: 35px;
-                height: 35px;
+                width: 36px;
+                height: 36px;
                 margin-right: 10px;
             }
             
@@ -505,14 +551,18 @@
                 font-size: 15px;
             }
             
+            .status {
+                font-size: 12px;
+            }
+            
             .messages-container {
                 padding: 12px;
-                gap: 12px;
+                gap: 6px;
             }
             
             .message {
-                max-width: 80%;
-                padding: 8px 12px;
+                max-width: 85%;
+                padding: 6px 10px;
             }
             
             .message-content {
@@ -520,7 +570,8 @@
             }
             
             .input-container {
-                padding: 8px 12px;
+                padding: 6px 12px;
+                min-height: 56px;
             }
             
             .action-icon {
@@ -538,6 +589,108 @@
                 width: 40px;
                 height: 40px;
                 font-size: 18px;
+            }
+            
+            .emoji-picker {
+                width: 250px;
+                max-height: 180px;
+            }
+            
+            .recording-box {
+                padding: 20px;
+                width: 95%;
+            }
+            
+            .recording-icon {
+                font-size: 50px;
+                margin-bottom: 15px;
+            }
+            
+            .recording-text {
+                font-size: 16px;
+                margin-bottom: 15px;
+            }
+            
+            .recording-timer {
+                font-size: 20px;
+                margin-bottom: 25px;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            .chat-header {
+                padding: 6px 10px;
+                min-height: 52px;
+            }
+            
+            .back-btn {
+                margin-right: 12px;
+                width: 36px;
+                height: 36px;
+            }
+            
+            .avatar {
+                width: 32px;
+                height: 32px;
+                margin-right: 8px;
+            }
+            
+            .username {
+                font-size: 14px;
+            }
+            
+            .status {
+                font-size: 11px;
+            }
+            
+            .header-actions {
+                gap: 15px;
+            }
+            
+            .action-btn {
+                width: 36px;
+                height: 36px;
+                font-size: 18px;
+            }
+            
+            .messages-container {
+                padding: 10px;
+                gap: 5px;
+            }
+            
+            .message {
+                max-width: 90%;
+                padding: 5px 8px;
+            }
+            
+            .message-content {
+                font-size: 13px;
+            }
+            
+            .input-container {
+                padding: 5px 10px;
+                min-height: 52px;
+            }
+            
+            .input-actions {
+                gap: 8px;
+            }
+            
+            .action-icon {
+                width: 30px;
+                height: 30px;
+                font-size: 16px;
+            }
+            
+            .message-input {
+                padding: 6px 10px;
+                font-size: 13px;
+            }
+            
+            .send-btn {
+                width: 36px;
+                height: 36px;
+                font-size: 16px;
             }
         }
     </style>
@@ -612,24 +765,6 @@
             </div>
         </div>
     </div>
-    
-    <!-- Group Call Modal -->
-    <div class="call-modal" id="groupCallModal">
-        <div class="call-container">
-            <div class="call-info">
-                <div class="call-name">Group Call</div>
-                <div class="call-status" id="groupCallStatus">0 participants</div>
-            </div>
-            <div class="participant-grid" id="participantGrid">
-                <!-- Participant videos will be added here -->
-            </div>
-            <div class="call-controls">
-                <button class="call-btn call-mute-btn" id="groupMuteBtn">🔇</button>
-                <button class="call-btn call-end-btn" id="endGroupCallBtn">📞</button>
-                <button class="call-btn call-camera-btn" id="groupCameraBtn">📹</button>
-            </div>
-        </div>
-    </div>
 
     <script>
         // DOM Elements
@@ -657,12 +792,6 @@
         const muteBtn = document.getElementById('muteBtn');
         const endCallBtn = document.getElementById('endCallBtn');
         const cameraBtn = document.getElementById('cameraBtn');
-        const groupCallModal = document.getElementById('groupCallModal');
-        const groupCallStatus = document.getElementById('groupCallStatus');
-        const participantGrid = document.getElementById('participantGrid');
-        const groupMuteBtn = document.getElementById('groupMuteBtn');
-        const endGroupCallBtn = document.getElementById('endGroupCallBtn');
-        const groupCameraBtn = document.getElementById('groupCameraBtn');
         
         // Global variables
         let currentUser = null;
@@ -758,24 +887,24 @@
                             .then(response => response.json())
                             .then(onlineUsers => {
                                 const isOnline = onlineUsers.some(u => u.username === targetUser);
-                                userStatus.textContent = isOnline ? 'Online' : 'Offline';
+                                userStatus.textContent = isOnline ? 'online' : 'offline';
                                 userStatus.innerHTML = isOnline ? 
-                                    '<span style="color: #4caf50; margin-right: 5px;">●</span>Online' : 
-                                    '<span style="color: #ccc; margin-right: 5px;">●</span>Offline';
+                                    '<span style="color: #d9fdd3;">●</span> online' : 
+                                    '<span style="color: #8699a3;">●</span> offline';
                             })
                             .catch(error => {
                                 console.error('Error checking online status:', error);
-                                userStatus.textContent = 'Last seen recently';
+                                userStatus.textContent = 'last seen recently';
                             });
                     } else {
                         userName.textContent = targetUser;
-                        userStatus.textContent = 'User not found';
+                        userStatus.textContent = 'user not found';
                     }
                 })
                 .catch(error => {
                     console.error('Error fetching user info:', error);
                     userName.textContent = targetUser;
-                    userStatus.textContent = 'Error loading status';
+                    userStatus.textContent = 'error loading status';
                 });
         }
         
@@ -819,7 +948,7 @@
                     messageElements.forEach(el => {
                         const statusEl = el.querySelector('.message-status');
                         if (statusEl) {
-                            statusEl.textContent = 'Read';
+                            statusEl.textContent = 'read';
                             statusEl.classList.remove('delivered');
                             statusEl.classList.add('read');
                         }
@@ -885,7 +1014,7 @@
                     
                     if (messages.length === 0) {
                         messagesContainer.innerHTML = `
-                            <div style="text-align: center; padding: 20px; color: #888;">
+                            <div style="text-align: center; padding: 20px; color: #667781;">
                                 No messages yet. Say hello to start the conversation!
                             </div>
                         `;
@@ -942,7 +1071,7 @@
                 const fileName = content.split('/').pop();
                 messageContent = `
                     <div class="message-content">
-                        📎 <a href="${content}" target="_blank" style="color: #1877f2; text-decoration: none;">${fileName}</a>
+                        📎 <a href="${content}" target="_blank" style="color: #008069; text-decoration: none;">${fileName}</a>
                     </div>
                 `;
             }
@@ -975,7 +1104,7 @@
         function formatMessageText(text) {
             // Convert URLs to links
             const urlRegex = /(https?:\/\/[^\s]+)/g;
-            text = text.replace(urlRegex, url => `<a href="${url}" target="_blank" style="color: #1877f2; text-decoration: none;">${url}</a>`);
+            text = text.replace(urlRegex, url => `<a href="${url}" target="_blank" style="color: #008069; text-decoration: none;">${url}</a>`);
             
             // Convert line breaks to <br>
             text = text.replace(/\n/g, '<br>');
@@ -1027,7 +1156,6 @@
                 <div class="typing-dot"></div>
                 <div class="typing-dot"></div>
                 <div class="typing-dot"></div>
-                <span style="margin-left: 10px; color: #555;">${userName.textContent} is typing...</span>
             `;
             
             messagesContainer.appendChild(typingDiv);
@@ -1056,7 +1184,7 @@
             // Auto-resize textarea
             messageInput.addEventListener('input', () => {
                 messageInput.style.height = 'auto';
-                messageInput.style.height = Math.min(messageInput.scrollHeight, 120) + 'px';
+                messageInput.style.height = Math.min(messageInput.scrollHeight, 100) + 'px';
             });
             
             // Attachment button
@@ -1102,11 +1230,6 @@
             muteBtn.addEventListener('click', toggleMute);
             cameraBtn.addEventListener('click', toggleCamera);
             endCallBtn.addEventListener('click', endCall);
-            
-            // Group call controls
-            groupMuteBtn.addEventListener('click', toggleMute);
-            groupCameraBtn.addEventListener('click', toggleCamera);
-            endGroupCallBtn.addEventListener('click', endCall);
             
             // Typing indicator
             messageInput.addEventListener('input', () => {
@@ -1367,15 +1490,12 @@
             if (type === 'voice' || type === 'video') {
                 callModal.style.display = 'flex';
                 callStatus.textContent = 'Calling...';
-            } else {
-                groupCallModal.style.display = 'flex';
-                groupCallStatus.textContent = 'Connecting...';
             }
             
             // Get media stream
             const constraints = {
                 audio: true,
-                video: type === 'video' || type === 'group' || type === 'conference'
+                video: type === 'video'
             };
             
             navigator.mediaDevices.getUserMedia(constraints)
@@ -1383,11 +1503,9 @@
                     localStream = stream;
                     
                     // Display local video
-                    if (type === 'video' || type === 'group' || type === 'conference') {
+                    if (type === 'video') {
                         localVideo.srcObject = stream;
-                        if (type === 'video') {
-                            remoteVideo.style.display = 'block';
-                        }
+                        remoteVideo.style.display = 'block';
                     }
                     
                     // Create peer connection
@@ -1449,8 +1567,6 @@
                 if (callType === 'video') {
                     remoteVideo.srcObject = event.streams[0];
                     remoteVideo.style.display = 'block';
-                } else if (callType === 'group' || callType === 'conference') {
-                    addParticipantStream(event.streams[0], 'Remote User');
                 }
             };
             
@@ -1538,10 +1654,8 @@
             
             if (isMuted) {
                 muteBtn.textContent = '🔇';
-                groupMuteBtn.textContent = '🔇';
             } else {
                 muteBtn.textContent = '🔈';
-                groupMuteBtn.textContent = '🔈';
             }
         }
         
@@ -1556,10 +1670,8 @@
             
             if (isCameraOff) {
                 cameraBtn.textContent = '📹';
-                groupCameraBtn.textContent = '📹';
             } else {
                 cameraBtn.textContent = '📹';
-                groupCameraBtn.textContent = '📹';
             }
         }
         
@@ -1587,13 +1699,10 @@
             
             // Hide modals
             callModal.style.display = 'none';
-            groupCallModal.style.display = 'none';
             
             // Reset variables
             currentCallId = null;
             callType = null;
-            participants = [];
-            participantGrid.innerHTML = '';
         }
         
         // Close call
@@ -1604,32 +1713,6 @@
         // Update participants list in group call
         function updateParticipants(participantList) {
             participants = participantList;
-            
-            if (callType === 'group' || callType === 'conference') {
-                groupCallStatus.textContent = `${participants.length} participant${participants.length !== 1 ? 's' : ''}`;
-                
-                // Update participant grid (in a real app, we would handle multiple video streams)
-                participantGrid.innerHTML = '';
-                
-                participants.forEach(participant => {
-                    if (participant !== currentUser.username) {
-                        const participantDiv = document.createElement('div');
-                        participantDiv.className = 'participant-video';
-                        participantDiv.innerHTML = `
-                            <video autoplay playsinline></video>
-                            <div class="participant-name">${participant}</div>
-                        `;
-                        participantGrid.appendChild(participantDiv);
-                    }
-                });
-            }
-        }
-        
-        // Add participant stream to grid
-        function addParticipantStream(stream, name) {
-            // In a real app, we would find the appropriate video element and set its srcObject
-            // For this demo, we'll just log it
-            console.log('Received stream for participant:', name);
         }
     </script>
 </body>
